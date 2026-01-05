@@ -5,6 +5,13 @@ const api = axios.create({
   timeout: 60000
 })
 
+export const authApi = {
+  // 验证密码
+  verify(password) {
+    return api.post('/auth/verify', { password })
+  }
+}
+
 export const videoApi = {
   // 获取视频列表
   getList(page = 1) {

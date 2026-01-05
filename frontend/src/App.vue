@@ -12,7 +12,9 @@
             class="password-input"
             autofocus
           />
-          <button type="submit" class="submit-btn">进入</button>
+          <button type="submit" class="submit-btn" :disabled="loading">
+            {{ loading ? '验证中...' : '进入' }}
+          </button>
         </form>
         <p v-if="error" class="error-msg">{{ error }}</p>
       </div>
@@ -31,8 +33,7 @@
 </template>
 
 <script>
-// 访问密码 - 可以改成你想要的密码
-const ACCESS_PASSWORD = 'lao4g.pass'
+import { authApi } from './api'
 
 export default {
   name: 'App',
@@ -40,7 +41,8 @@ export default {
     return {
       isAuthenticated: false,
       password: '',
-      error: ''
+      error: '',
+      loading: false
     }
   },
   created() {
@@ -51,15 +53,25 @@ export default {
     }
   },
   methods: {
-    checkPassword() {
-      if (this.password === ACCESS_PASSWORD) {
-        this.isAuthenticated = true
-        this.error = ''
-        // 存储到 sessionStorage，关闭浏览器后失效
-        sessionStorage.setItem('authenticated', 'true')
-      } else {
-        this.error = '密码错误'
+    async checkPassword() {
+      if (this.loading) return
+      this.loading = true
+      this.error = ''
+
+      try {
+        const res = await authApi.verify(this.password)
+        if (res.data.success) {
+          this.isAuthenticated = true
+          sessionStorage.setItem('authenticated', 'true')
+        } else {
+          this.error = res.data.message || '密码错误'
+          this.password = ''
+        }
+      } catch (e) {
+        this.error = '验证失败，请重试'
         this.password = ''
+      } finally {
+        this.loading = false
       }
     }
   }

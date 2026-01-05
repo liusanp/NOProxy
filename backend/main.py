@@ -4,11 +4,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pathlib import Path
+from pydantic import BaseModel
 
 from .config import settings
 from .routers import videos, stream
 from .services.scraper import scraper_service
 from .services.proxy import proxy_service
+
+
+class PasswordRequest(BaseModel):
+    password: str
 
 
 # 前端构建目录
@@ -58,6 +63,14 @@ app.include_router(stream.router)
 async def health_check():
     """健康检查"""
     return {"status": "healthy"}
+
+
+@app.post("/api/auth/verify")
+async def verify_password(req: PasswordRequest):
+    """验证访问密码"""
+    if req.password == settings.ACCESS_PASSWORD:
+        return {"success": True}
+    return {"success": False, "message": "密码错误"}
 
 
 # 提供前端静态文件服务

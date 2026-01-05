@@ -50,9 +50,10 @@ cp .env.example .env
 |------|------|--------|
 | `HOST` | 服务监听地址 | 0.0.0.0 |
 | `PORT` | 服务端口 | 8000 |
+| `ACCESS_PASSWORD` | 访问密码 | changeme |
 | `TARGET_BASE_URL` | 目标网站地址 | - |
 | `VIDEO_LIST_PATH` | 视频列表路径 | /videos |
-| `BROWSER_MODE` | 浏览器模式 (auto/cdp) | auto |
+| `BROWSER_MODE` | 浏览器模式 (auto/cdp) | cdp |
 | `CDP_URL` | CDP 连接地址 | http://127.0.0.1:9222 |
 | `HEADLESS` | 无头模式 | true |
 | `BROWSER_PROXY` | 浏览器代理 | - |

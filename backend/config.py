@@ -8,6 +8,9 @@ class Settings(BaseSettings):
     PORT: int = 8000
     DEBUG: bool = True
 
+    # 访问密码
+    ACCESS_PASSWORD: str = "changeme"
+
     # 目标网站配置
     TARGET_BASE_URL: str = "https://91porn.com"
     VIDEO_LIST_PATH: str = "/v.php?category=rf&viewtype=basic"
