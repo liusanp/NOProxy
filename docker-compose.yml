@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  noproxy:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - BROWSER_MODE=cdp
+      - CDP_URL=http://127.0.0.1:9222
+      - HEADLESS=false
+      - BROWSER_PROXY=${BROWSER_PROXY:-}  # 可选：设置代理
+    shm_size: '2gb'
+    restart: unless-stopped
