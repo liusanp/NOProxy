@@ -31,15 +31,6 @@
 
       <div class="video-info">
         <h1 class="video-title">{{ videoDetail?.title || '加载中...' }}</h1>
-        <p class="video-url">
-          代理地址: {{ streamUrl }}
-        </p>
-        <p class="video-url" v-if="videoDetail?.m3u8_url">
-          原始地址: {{ videoDetail.m3u8_url }}
-        </p>
-        <p class="video-url" v-else style="color: #f44;">
-          未找到视频链接
-        </p>
       </div>
     </div>
   </div>
@@ -142,7 +133,11 @@ export default {
     },
 
     goBack() {
-      this.$router.push({ name: 'VideoList' })
+      if (window.history.length > 1) {
+        this.$router.back()
+      } else {
+        this.$router.push({ name: 'VideoList' })
+      }
     }
   }
 }
@@ -234,12 +229,5 @@ export default {
   font-size: 1.25rem;
   font-weight: 500;
   line-height: 1.4;
-}
-
-.video-url {
-  font-size: 0.8rem;
-  color: #888;
-  margin-top: 0.5rem;
-  word-break: break-all;
 }
 </style>

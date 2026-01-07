@@ -7,9 +7,10 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from .config import settings
-from .routers import videos, stream
+from .routers import videos, stream, cache
 from .services.scraper import scraper_service
 from .services.proxy import proxy_service
+from .services.video_cache import video_cache_service
 
 
 class PasswordRequest(BaseModel):
@@ -34,6 +35,7 @@ async def lifespan(app: FastAPI):
     print("正在关闭服务...")
     await scraper_service.close()
     await proxy_service.close()
+    await video_cache_service.close()
     print("服务已关闭")
 
 
@@ -57,6 +59,7 @@ app.add_middleware(
 # 注册 API 路由
 app.include_router(videos.router)
 app.include_router(stream.router)
+app.include_router(cache.router)
 
 
 @app.get("/health")
@@ -68,8 +71,10 @@ async def health_check():
 @app.post("/api/auth/verify")
 async def verify_password(req: PasswordRequest):
     """验证访问密码"""
+    if req.password == settings.ADMIN_PASSWORD:
+        return {"success": True, "isAdmin": True}
     if req.password == settings.ACCESS_PASSWORD:
-        return {"success": True}
+        return {"success": True, "isAdmin": False}
     return {"success": False, "message": "密码错误"}
 
 

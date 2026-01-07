@@ -24,6 +24,10 @@
     <template v-else>
       <header class="header">
         <router-link to="/" class="logo">NOProxy</router-link>
+        <nav class="nav">
+          <router-link to="/" class="nav-link">视频列表</router-link>
+          <router-link to="/cached" class="nav-link">已缓存</router-link>
+        </nav>
       </header>
       <main class="main">
         <router-view />
@@ -40,9 +44,15 @@ export default {
   data() {
     return {
       isAuthenticated: false,
+      isAdmin: false,
       password: '',
       error: '',
       loading: false
+    }
+  },
+  provide() {
+    return {
+      isAdmin: () => this.isAdmin
     }
   },
   created() {
@@ -50,6 +60,7 @@ export default {
     const authenticated = sessionStorage.getItem('authenticated')
     if (authenticated === 'true') {
       this.isAuthenticated = true
+      this.isAdmin = sessionStorage.getItem('isAdmin') === 'true'
     }
   },
   methods: {
@@ -62,7 +73,12 @@ export default {
         const res = await authApi.verify(this.password)
         if (res.data.success) {
           this.isAuthenticated = true
+          this.isAdmin = res.data.isAdmin || false
           sessionStorage.setItem('authenticated', 'true')
+          sessionStorage.setItem('isAdmin', this.isAdmin ? 'true' : 'false')
+          if (this.isAdmin) {
+            sessionStorage.setItem('adminToken', this.password)
+          }
         } else {
           this.error = res.data.message || '密码错误'
           this.password = ''
@@ -170,6 +186,9 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 100;
 }
 
 .logo {
@@ -177,6 +196,26 @@ body {
   font-weight: bold;
   color: #e50914;
   text-decoration: none;
+}
+
+.nav {
+  display: flex;
+  gap: 1.5rem;
+}
+
+.nav-link {
+  color: #888;
+  text-decoration: none;
+  font-size: 0.95rem;
+  transition: color 0.2s;
+}
+
+.nav-link:hover {
+  color: #fff;
+}
+
+.nav-link.router-link-exact-active {
+  color: #e50914;
 }
 
 .main {

@@ -10,6 +10,7 @@ class Settings(BaseSettings):
 
     # 访问密码
     ACCESS_PASSWORD: str = "changeme"
+    ADMIN_PASSWORD: str = "admin123"
 
     # 目标网站配置
     TARGET_BASE_URL: str = "https://91porn.com"
@@ -42,6 +43,12 @@ class Settings(BaseSettings):
     # 缓存配置
     CACHE_ENABLED: bool = True
     CACHE_TTL: int = 300  # 秒
+
+    # 视频文件缓存配置
+    VIDEO_CACHE_ENABLED: bool = True  # 是否启用视频本地缓存
+    VIDEO_CACHE_DIR: str = "cache/videos"  # 视频缓存目录
+    AUTO_PRECACHE: bool = True  # 是否自动预缓存列表中的视频
+    PRECACHE_CONCURRENT: int = 2  # 预缓存并发数
 
     class Config:
         env_file = ".env"

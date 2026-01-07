@@ -632,6 +632,134 @@ class ScraperService:
 
         return detail
 
+    async def get_video_detail_in_new_tab(self, video_url: str) -> Optional[VideoDetail]:
+        """在新标签页获取视频详情（用于后台预缓存，不干扰主页面）"""
+        if not self._context:
+            await self.initialize()
+
+        page = None
+        try:
+            page = await self._context.new_page()
+            print(f"[预缓存] 新标签页访问: {video_url}")
+
+            # 设置请求拦截来捕获m3u8请求
+            m3u8_urls = []
+
+            async def handle_request(request):
+                url = request.url
+                if ".m3u8" in url or "m3u8" in url:
+                    m3u8_urls.append(url)
+
+            page.on("request", handle_request)
+
+            try:
+                await page.goto(video_url, wait_until="domcontentloaded", timeout=30000)
+            except Exception as goto_error:
+                print(f"[预缓存] 页面导航异常: {goto_error}")
+                await asyncio.sleep(2)
+
+            await asyncio.sleep(3)
+
+            # 尝试点击播放按钮
+            try:
+                play_btn = await page.query_selector(".vjs-big-play-button, .play-button, #player")
+                if play_btn:
+                    await play_btn.click()
+                    await asyncio.sleep(2)
+            except:
+                pass
+
+            # 获取视频链接
+            video_src = None
+
+            # 方法1: 从 .video-container 下的 source 标签获取
+            source_el = await page.query_selector(".video-container source")
+            if source_el:
+                video_src = await source_el.get_attribute("src")
+
+            # 方法2: 从 .video-container 下的 video 标签获取
+            if not video_src:
+                video_el = await page.query_selector(".video-container video")
+                if video_el:
+                    video_src = await video_el.get_attribute("src")
+
+            # 方法3: 从拦截的请求中获取 m3u8
+            if not video_src and m3u8_urls:
+                for url in m3u8_urls:
+                    if "index.m3u8" in url or "/hls/" in url:
+                        video_src = url
+                        break
+                if not video_src:
+                    video_src = m3u8_urls[0]
+
+            # 方法4: 从页面内容中提取
+            if not video_src:
+                content = await page.content()
+                mp4_pattern = r'https?://[^\s"\'<>]+\.mp4[^\s"\'<>]*'
+                matches = re.findall(mp4_pattern, content)
+                if matches:
+                    video_src = matches[0]
+                else:
+                    m3u8_pattern = r'https?://[^\s"\'<>]+\.m3u8[^\s"\'<>]*'
+                    matches = re.findall(m3u8_pattern, content)
+                    if matches:
+                        video_src = matches[0]
+
+            # 方法5: 从任意 video source 标签获取
+            if not video_src:
+                source_el = await page.query_selector("video source")
+                if source_el:
+                    video_src = await source_el.get_attribute("src")
+
+            # 方法6: 从任意 video 标签的 src 获取
+            if not video_src:
+                video_el = await page.query_selector("video")
+                if video_el:
+                    video_src = await video_el.get_attribute("src")
+
+            if video_src:
+                video_src = re.sub(r'\.com//+', '.com/', video_src)
+
+            # 获取标题
+            title = await page.title()
+            title_el = await page.query_selector("h4, .video-title, #viewvideo-title")
+            if title_el:
+                title = await title_el.inner_text()
+
+            # 获取缩略图
+            thumbnail = None
+            video_el = await page.query_selector("video")
+            if video_el:
+                thumbnail = await video_el.get_attribute("poster")
+
+            # 提取视频ID
+            parsed = urlparse(video_url)
+            query_params = parse_qs(parsed.query)
+            video_id = query_params.get("viewkey", ["unknown"])[0]
+
+            if video_src:
+                print(f"[预缓存] 获取到视频链接: {video_id}")
+                return VideoDetail(
+                    id=video_id,
+                    title=title.strip() if title else "未知标题",
+                    thumbnail=thumbnail,
+                    m3u8_url=video_src,
+                    original_url=video_url
+                )
+            else:
+                print(f"[预缓存] 未找到视频链接: {video_id}")
+                return None
+
+        except Exception as e:
+            print(f"[预缓存] 获取视频详情失败: {e}")
+            return None
+        finally:
+            if page:
+                try:
+                    await page.close()
+                except:
+                    pass
+
 
 # 全局单例
 scraper_service = ScraperService()

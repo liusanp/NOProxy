@@ -95,7 +95,24 @@ export default {
       inputPage: 1
     }
   },
+  watch: {
+    '$route.query.page': {
+      handler(newPage) {
+        const p = parseInt(newPage) || 1
+        if (p !== this.page) {
+          this.page = p
+          this.inputPage = p
+          this.fetchVideos()
+        }
+      },
+      immediate: true
+    }
+  },
   mounted() {
+    // 从 URL 读取页码
+    const urlPage = parseInt(this.$route.query.page) || 1
+    this.page = urlPage
+    this.inputPage = urlPage
     this.fetchVideos()
   },
   methods: {
@@ -125,6 +142,8 @@ export default {
       if (newPage < 1 || newPage > this.totalPages) return
       this.page = newPage
       this.inputPage = newPage
+      // 更新 URL
+      this.$router.push({ query: { page: newPage } })
       this.fetchVideos()
       window.scrollTo({ top: 0, behavior: 'smooth' })
     },

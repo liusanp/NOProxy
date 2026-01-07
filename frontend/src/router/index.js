@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import VideoList from '../views/VideoList.vue'
 import VideoPlayer from '../views/VideoPlayer.vue'
+import CachedVideos from '../views/CachedVideos.vue'
 
 const routes = [
   {
@@ -13,6 +14,11 @@ const routes = [
     name: 'VideoPlayer',
     component: VideoPlayer,
     props: true
+  },
+  {
+    path: '/cached',
+    name: 'CachedVideos',
+    component: CachedVideos
   }
 ]
 
