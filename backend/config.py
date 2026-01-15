@@ -47,6 +47,8 @@ class Settings(BaseSettings):
     # 视频文件缓存配置
     VIDEO_CACHE_ENABLED: bool = True  # 是否启用视频本地缓存
     VIDEO_CACHE_DIR: str = "cache/videos"  # 视频缓存目录
+    VIDEO_LIST_CACHE_TTL: int = 12 * 60 * 60  # 视频列表缓存有效期（秒），默认12小时
+    CACHE_PAGE_SIZE: int = 20  # 已缓存视频列表每页数量
     AUTO_PRECACHE: bool = True  # 是否自动预缓存列表中的视频
     PRECACHE_CONCURRENT: int = 2  # 预缓存并发数
 

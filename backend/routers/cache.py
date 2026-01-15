@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Header
+from fastapi import APIRouter, HTTPException, Header, Query
 from typing import Optional
 from ..services.video_cache import video_cache_service
 from ..config import settings
@@ -13,17 +13,34 @@ def verify_admin(admin_token: Optional[str] = None):
 
 
 @router.get("")
-async def list_cached_videos():
-    """列出所有已缓存的视频"""
+async def list_cached_videos(
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(None, ge=1, le=100, description="每页数量")
+):
+    """列出已缓存的视频（分页）"""
+    if page_size is None:
+        page_size = settings.CACHE_PAGE_SIZE
+
     cached = await video_cache_service.list_cached_videos()
     total_size = video_cache_service.get_cache_size()
+    total_count = len(cached)
+    total_pages = (total_count + page_size - 1) // page_size if total_count > 0 else 1
+
+    # 分页
+    start = (page - 1) * page_size
+    end = start + page_size
+    paged_videos = cached[start:end]
 
     return {
         "enabled": settings.VIDEO_CACHE_ENABLED,
         "cache_dir": settings.VIDEO_CACHE_DIR,
         "total_size": total_size,
         "total_size_mb": round(total_size / (1024 * 1024), 2),
-        "videos": cached,
+        "videos": paged_videos,
+        "total": total_count,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": total_pages,
     }
 
 

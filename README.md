@@ -97,6 +97,8 @@ cp .env.example .env
 |------|------|--------|
 | `VIDEO_CACHE_ENABLED` | 启用本地缓存 | true |
 | `VIDEO_CACHE_DIR` | 缓存目录 | cache/videos |
+| `VIDEO_LIST_CACHE_TTL` | 视频列表缓存有效期（秒） | 43200 (12小时) |
+| `CACHE_PAGE_SIZE` | 已缓存视频列表每页数量 | 20 |
 | `AUTO_PRECACHE` | 自动预缓存列表视频 | true |
 | `PRECACHE_CONCURRENT` | 预缓存并发数 | 2 |
 
@@ -105,8 +107,8 @@ cp .env.example .env
 启用缓存后，以下内容会自动保存到本地：
 
 - **视频列表**：每页列表信息持久化保存
-  - 3小时内优先使用缓存，不请求网站
-  - 超过3小时会重新获取
+  - 默认12小时内优先使用缓存，不请求网站（可通过 `VIDEO_LIST_CACHE_TTL` 配置）
+  - 超过有效期会重新获取
   - 获取失败时使用过期缓存兜底
 - **封面图**：获取列表时后台自动下载，文件名为 `{viewkey}.jpg`
 - **视频文件**：首次播放时后台自动下载（M3U8 或 MP4）

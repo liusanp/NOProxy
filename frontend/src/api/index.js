@@ -40,9 +40,11 @@ export const videoApi = {
 }
 
 export const cacheApi = {
-  // 获取所有缓存视频列表
-  getList() {
-    return api.get('/cache')
+  // 获取缓存视频列表（分页）
+  getList(page = 1, pageSize = null) {
+    const params = { page }
+    if (pageSize) params.page_size = pageSize
+    return api.get('/cache', { params })
   },
 
   // 获取指定视频缓存状态

@@ -4,9 +4,9 @@
       <h1 class="page-title">已缓存视频</h1>
       <div class="cache-info" v-if="cacheInfo">
         <span class="cache-size">{{ cacheInfo.total_size_mb }} MB</span>
-        <span class="cache-count">{{ videos.length }} 个视频</span>
+        <span class="cache-count">{{ cacheInfo.total }} 个视频</span>
         <button
-          v-if="canDelete && videos.length > 0"
+          v-if="canDelete && cacheInfo.total > 0"
           class="clear-btn"
           @click="confirmClearAll"
           :disabled="clearing"
@@ -35,36 +35,67 @@
     </div>
 
     <!-- 视频网格 -->
-    <div v-else class="video-grid">
-      <div
-        v-for="video in videos"
-        :key="video.viewkey"
-        class="video-card"
-        @click="playVideo(video)"
-      >
-        <div class="thumbnail">
-          <img
-            :src="getThumbnailUrl(video.viewkey)"
-            :alt="video.title"
-            @error="handleImageError"
+    <template v-else>
+      <div class="video-grid">
+        <div
+          v-for="video in videos"
+          :key="video.viewkey"
+          class="video-card"
+          @click="playVideo(video)"
+        >
+          <div class="thumbnail">
+            <img
+              :src="getThumbnailUrl(video.viewkey)"
+              :alt="video.title"
+              @error="handleImageError"
+            >
+            <div class="play-icon">▶</div>
+            <span class="video-type">{{ video.type.toUpperCase() }}</span>
+            <span class="video-size">{{ formatSize(video.size) }}</span>
+          </div>
+          <div class="info">
+            <h3 class="title">{{ video.title || video.viewkey }}</h3>
+          </div>
+          <button
+            v-if="canDelete"
+            class="delete-btn"
+            @click.stop="confirmDelete(video)"
+            title="删除缓存"
           >
-          <div class="play-icon">▶</div>
-          <span class="video-type">{{ video.type.toUpperCase() }}</span>
-          <span class="video-size">{{ formatSize(video.size) }}</span>
+            ×
+          </button>
         </div>
-        <div class="info">
-          <h3 class="title">{{ video.title || video.viewkey }}</h3>
+      </div>
+
+      <!-- 分页 -->
+      <div v-if="totalPages > 1" class="pagination">
+        <button
+          class="page-btn"
+          :disabled="currentPage === 1"
+          @click="goToPage(currentPage - 1)"
+        >
+          上一页
+        </button>
+        <div class="page-numbers">
+          <button
+            v-for="p in visiblePages"
+            :key="p"
+            class="page-num"
+            :class="{ active: p === currentPage }"
+            @click="goToPage(p)"
+          >
+            {{ p }}
+          </button>
         </div>
         <button
-          v-if="canDelete"
-          class="delete-btn"
-          @click.stop="confirmDelete(video)"
-          title="删除缓存"
+          class="page-btn"
+          :disabled="currentPage === totalPages"
+          @click="goToPage(currentPage + 1)"
         >
-          ×
+          下一页
         </button>
       </div>
-    </div>
+    </template>
   </div>
 </template>
 
@@ -80,7 +111,9 @@ export default {
       cacheInfo: null,
       loading: false,
       error: null,
-      clearing: false
+      clearing: false,
+      currentPage: 1,
+      totalPages: 1
     }
   },
   computed: {
@@ -89,6 +122,26 @@ export default {
     },
     adminToken() {
       return sessionStorage.getItem('adminToken')
+    },
+    visiblePages() {
+      const pages = []
+      const total = this.totalPages
+      const current = this.currentPage
+      let start = Math.max(1, current - 2)
+      let end = Math.min(total, current + 2)
+
+      if (end - start < 4) {
+        if (start === 1) {
+          end = Math.min(total, start + 4)
+        } else if (end === total) {
+          start = Math.max(1, end - 4)
+        }
+      }
+
+      for (let i = start; i <= end; i++) {
+        pages.push(i)
+      }
+      return pages
     }
   },
   mounted() {
@@ -100,8 +153,9 @@ export default {
       this.error = null
 
       try {
-        const response = await cacheApi.getList()
+        const response = await cacheApi.getList(this.currentPage)
         this.cacheInfo = response.data
+        this.totalPages = response.data.total_pages
 
         // 获取每个视频的详情
         const videosWithDetails = await Promise.all(
@@ -128,6 +182,13 @@ export default {
       } finally {
         this.loading = false
       }
+    },
+
+    goToPage(page) {
+      if (page < 1 || page > this.totalPages || page === this.currentPage) return
+      this.currentPage = page
+      this.fetchCachedVideos()
+      window.scrollTo({ top: 0, behavior: 'smooth' })
     },
 
     getThumbnailUrl(viewkey) {
@@ -160,11 +221,12 @@ export default {
 
       try {
         await cacheApi.delete(video.viewkey, this.adminToken)
-        this.videos = this.videos.filter(v => v.viewkey !== video.viewkey)
-        // 更新缓存大小
-        if (this.cacheInfo) {
-          this.cacheInfo.total_size -= video.size
-          this.cacheInfo.total_size_mb = (this.cacheInfo.total_size / (1024 * 1024)).toFixed(2)
+        // 重新获取当前页
+        await this.fetchCachedVideos()
+        // 如果当前页为空且不是第一页，跳转到上一页
+        if (this.videos.length === 0 && this.currentPage > 1) {
+          this.currentPage--
+          await this.fetchCachedVideos()
         }
       } catch (err) {
         console.error('删除失败:', err)
@@ -181,10 +243,13 @@ export default {
       try {
         await cacheApi.clearAll(this.adminToken)
         this.videos = []
+        this.currentPage = 1
+        this.totalPages = 1
         this.cacheInfo = {
           ...this.cacheInfo,
           total_size: 0,
-          total_size_mb: 0
+          total_size_mb: 0,
+          total: 0
         }
       } catch (err) {
         console.error('清空失败:', err)
@@ -412,5 +477,57 @@ export default {
   margin-top: 1rem;
   color: #e50914;
   text-decoration: underline;
+}
+
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 2rem;
+  padding: 1rem 0;
+}
+
+.page-btn {
+  padding: 0.5rem 1rem;
+  background-color: #333;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.page-btn:hover:not(:disabled) {
+  background-color: #e50914;
+}
+
+.page-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.page-numbers {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.page-num {
+  width: 36px;
+  height: 36px;
+  background-color: #333;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.page-num:hover {
+  background-color: #444;
+}
+
+.page-num.active {
+  background-color: #e50914;
 }
 </style>

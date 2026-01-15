@@ -11,9 +11,6 @@ router = APIRouter(prefix="/api/videos", tags=["videos"])
 _total_pages_cache = {"total_pages": 1}
 _precache_queue = set()  # 正在预缓存的视频ID
 
-# 列表缓存有效期：3小时
-LIST_CACHE_MAX_AGE = 3 * 60 * 60
-
 
 async def _download_thumbnails(videos):
     """后台下载视频封面图"""
@@ -83,9 +80,9 @@ async def _precache_videos(videos):
 @router.get("", response_model=VideoListResponse)
 async def get_video_list(page: int = Query(1, ge=1, description="页码")):
     """获取视频列表"""
-    # 优先使用有效期内的缓存（3小时）
+    # 优先使用有效期内的缓存
     if settings.VIDEO_CACHE_ENABLED:
-        fresh_cache = await video_cache_service.get_cached_list(page, max_age=LIST_CACHE_MAX_AGE)
+        fresh_cache = await video_cache_service.get_cached_list(page, max_age=settings.VIDEO_LIST_CACHE_TTL)
         if fresh_cache:
             videos = [VideoItem(**v) for v in fresh_cache.get("videos", [])]
             response = VideoListResponse(
