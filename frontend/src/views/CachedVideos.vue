@@ -145,7 +145,19 @@ export default {
     }
   },
   mounted() {
+    // 从 URL 读取页码
+    const page = parseInt(this.$route.query.page) || 1
+    this.currentPage = page
     this.fetchCachedVideos()
+  },
+  watch: {
+    '$route.query.page'(newPage) {
+      const page = parseInt(newPage) || 1
+      if (page !== this.currentPage) {
+        this.currentPage = page
+        this.fetchCachedVideos()
+      }
+    }
   },
   methods: {
     async fetchCachedVideos() {
@@ -186,8 +198,8 @@ export default {
 
     goToPage(page) {
       if (page < 1 || page > this.totalPages || page === this.currentPage) return
-      this.currentPage = page
-      this.fetchCachedVideos()
+      // 通过 URL 参数保持分页状态
+      this.$router.push({ query: { page } })
       window.scrollTo({ top: 0, behavior: 'smooth' })
     },
 
@@ -225,8 +237,7 @@ export default {
         await this.fetchCachedVideos()
         // 如果当前页为空且不是第一页，跳转到上一页
         if (this.videos.length === 0 && this.currentPage > 1) {
-          this.currentPage--
-          await this.fetchCachedVideos()
+          this.$router.replace({ query: { page: this.currentPage - 1 } })
         }
       } catch (err) {
         console.error('删除失败:', err)
