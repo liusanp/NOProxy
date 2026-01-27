@@ -16,27 +16,24 @@
 
 ### Docker 部署（推荐）
 
+使用 docker-compose 一键启动，包含独立的 Chrome 容器：
+
 ```bash
 docker-compose up -d
 ```
 
 访问 http://localhost:8000
 
-#### 映射缓存目录（可选）
+服务说明：
+- `chrome`: browserless/chrome 浏览器服务，端口 9222
+- `backend`: Python 后端服务，端口 8000
 
-如需持久化视频缓存，可在 `docker-compose.yml` 中添加 volumes 映射：
+缓存目录已默认映射到 `./cache`。
 
-```yaml
-services:
-  noproxy:
-    build: .
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./cache:/app/cache  # 映射视频缓存目录
-    environment:
-      - VIDEO_CACHE_ENABLED=true
-      # ... 其他配置
+#### 使用代理（可选）
+
+```bash
+BROWSER_PROXY=http://proxy:port docker-compose up -d
 ```
 
 ### 本地开发
@@ -87,8 +84,7 @@ cp .env.example .env
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
 | `BROWSER_MODE` | 浏览器模式 (auto/cdp) | cdp |
-| `CDP_URL` | CDP 连接地址 | http://127.0.0.1:9222 |
-| `HEADLESS` | 无头模式 | true |
+| `CDP_URL` | CDP 连接地址 | http://chrome:3000 (Docker) |
 | `BROWSER_PROXY` | 浏览器代理 | - |
 
 ### 缓存配置
@@ -178,7 +174,8 @@ cp .env.example .env
 │   │   ├── 0.ts, 1.ts...
 │   │   └── detail.json
 │   └── ...
-└── Dockerfile
+├── Dockerfile
+└── docker-compose.yml
 ```
 
 ## License
