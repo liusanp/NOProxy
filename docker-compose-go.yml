@@ -13,12 +13,15 @@ services:
     shm_size: 2gb
 
   backend:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile-go
     restart: unless-stopped
     environment:
       - BROWSER_MODE=cdp
       - CDP_URL=http://chrome:3000
-      - BROWSER_PROXY=${BROWSER_PROXY:-}
+      - HOST=0.0.0.0
+      - PORT=8000
     ports:
       - "8000:8000"
     volumes:
