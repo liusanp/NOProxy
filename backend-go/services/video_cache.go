@@ -424,6 +424,16 @@ func (v *VideoCacheService) downloadM3u8Video(viewkey, m3u8URL, m3u8Content stri
 		v.SaveDetail(viewkey, detail)
 	}
 
+	// 计算目录大小并写入数据库
+	size := v.getDirSize(cacheDir)
+	var title, thumbnail, originalURL string
+	if detail != nil {
+		title = detail.Title
+		thumbnail = detail.Thumbnail
+		originalURL = detail.OriginalURL
+	}
+	GetCacheDBService().AddCachedVideo(viewkey, title, "m3u8", size, thumbnail, originalURL)
+
 	v.mu.Lock()
 	v.downloadProgress[viewkey]["status"] = "complete"
 	v.mu.Unlock()
@@ -521,6 +531,15 @@ func (v *VideoCacheService) downloadMp4Video(viewkey, mp4URL string, detail *mod
 	if detail != nil {
 		v.SaveDetail(viewkey, detail)
 	}
+
+	// 写入数据库
+	var title, thumbnail, originalURL string
+	if detail != nil {
+		title = detail.Title
+		thumbnail = detail.Thumbnail
+		originalURL = detail.OriginalURL
+	}
+	GetCacheDBService().AddCachedVideo(viewkey, title, "mp4", downloaded, thumbnail, originalURL)
 
 	v.mu.Lock()
 	v.downloadProgress[viewkey]["status"] = "complete"
@@ -657,6 +676,11 @@ func (v *VideoCacheService) DeleteCachedVideo(viewkey string) bool {
 	thumbPath := v.getThumbnailCachePath(viewkey)
 	os.Remove(thumbPath)
 
+	// 从数据库删除记录
+	if deleted {
+		GetCacheDBService().DeleteCachedVideo(viewkey)
+	}
+
 	return deleted
 }
 
@@ -672,8 +696,8 @@ func (v *VideoCacheService) ClearAllCache() int {
 	// 保留目录，只删除内容
 	for _, entry := range entries {
 		path := filepath.Join(v.cacheDir, entry.Name())
-		// 跳过列表缓存文件
-		if strings.HasPrefix(entry.Name(), "list_page_") {
+		// 跳过列表缓存文件和数据库文件
+		if strings.HasPrefix(entry.Name(), "list_page_") || entry.Name() == "cache.db" {
 			continue
 		}
 		if entry.IsDir() {
@@ -682,6 +706,9 @@ func (v *VideoCacheService) ClearAllCache() int {
 			os.Remove(path)
 		}
 	}
+
+	// 清空数据库
+	GetCacheDBService().ClearAll()
 
 	return count
 }

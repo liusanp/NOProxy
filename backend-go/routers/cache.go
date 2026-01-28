@@ -48,32 +48,26 @@ func listCachedVideos(c *gin.Context) {
 		}
 	}
 
-	cacheService := services.GetVideoCacheService()
-	cached := cacheService.ListCachedVideos()
-	totalSize := cacheService.GetCacheSize()
-	totalCount := len(cached)
+	// 使用数据库查询
+	cacheDB := services.GetCacheDBService()
+	videos, totalCount, err := cacheDB.ListCachedVideos(page, pageSize)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Detail: "查询缓存失败"})
+		return
+	}
+
+	totalSize := cacheDB.GetTotalSize()
 	totalPages := 1
 	if totalCount > 0 {
 		totalPages = (totalCount + pageSize - 1) / pageSize
 	}
-
-	// 分页
-	start := (page - 1) * pageSize
-	end := start + pageSize
-	if start > totalCount {
-		start = totalCount
-	}
-	if end > totalCount {
-		end = totalCount
-	}
-	pagedVideos := cached[start:end]
 
 	c.JSON(http.StatusOK, models.CacheListResponse{
 		Enabled:     config.Settings.VideoCacheEnabled,
 		CacheDir:    config.Settings.VideoCacheDir,
 		TotalSize:   totalSize,
 		TotalSizeMB: float64(totalSize) / (1024 * 1024),
-		Videos:      pagedVideos,
+		Videos:      videos,
 		Total:       totalCount,
 		Page:        page,
 		PageSize:    pageSize,

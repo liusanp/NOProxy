@@ -78,6 +78,10 @@ func getVideoList(c *gin.Context) {
 
 	result, fetchError = scraperService.GetVideoList(page)
 
+	if fetchError != nil {
+		log.Printf("获取视频列表失败: %v", fetchError)
+	}
+
 	// 获取成功且有数据
 	if result != nil && len(result.Videos) > 0 {
 		if result.TotalPages > 1 {
