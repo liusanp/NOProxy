@@ -39,6 +39,7 @@ type Config struct {
 	CacheTTL           int
 	VideoCacheEnabled  bool
 	VideoCacheDir      string
+	CacheDBPath        string
 	VideoListCacheTTL  int
 	CachePageSize      int
 	AutoPrecache       bool
@@ -62,7 +63,7 @@ func Load() {
 		TargetBaseURL:  getEnv("TARGET_BASE_URL", "https://91porn.com"),
 		VideoListPath:  getEnv("VIDEO_LIST_PATH", "/v.php?category=rf&viewtype=basic"),
 
-		Headless:     getEnvBool("HEADLESS", true),
+		Headless:     getEnvBool("HEADLESS", false),
 		BrowserType:  getEnv("BROWSER_TYPE", "chromium"),
 		BrowserMode:  getEnv("BROWSER_MODE", "cdp"),
 		CdpURL:       getEnv("CDP_URL", "http://127.0.0.1:9222"),
@@ -83,6 +84,7 @@ func Load() {
 		CacheTTL:           getEnvInt("CACHE_TTL", 300),
 		VideoCacheEnabled:  getEnvBool("VIDEO_CACHE_ENABLED", true),
 		VideoCacheDir:      getEnv("VIDEO_CACHE_DIR", "cache/videos"),
+		CacheDBPath:        getEnv("CACHE_DB_PATH", ""),
 		VideoListCacheTTL:  getEnvInt("VIDEO_LIST_CACHE_TTL", 12*60*60),
 		CachePageSize:      getEnvInt("CACHE_PAGE_SIZE", 20),
 		AutoPrecache:       getEnvBool("AUTO_PRECACHE", true),

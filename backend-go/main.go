@@ -92,12 +92,21 @@ func main() {
 		log.Println("Playwright初始化完成")
 	}
 
+	// 初始化缓存数据库并同步现有缓存
+	log.Println("正在初始化缓存数据库...")
+	cacheDB := services.GetCacheDBService()
+	cacheService := services.GetVideoCacheService()
+	if err := cacheDB.SyncFromFileSystem(cacheService); err != nil {
+		log.Printf("警告: 缓存数据同步失败: %v", err)
+	}
+
 	// 优雅关闭
 	defer func() {
 		log.Println("正在关闭服务...")
 		scraperService.Close()
 		services.GetProxyService().Close()
-		services.GetVideoCacheService().Close()
+		cacheService.Close()
+		cacheDB.Close()
 		log.Println("服务已关闭")
 	}()
 

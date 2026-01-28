@@ -82,7 +82,11 @@ func (s *ScraperService) initializeInternal() error {
 		if len(pages) > 0 {
 			s.page = pages[0]
 		} else {
-			s.page = browser.MustPage("")
+			page, err := browser.Page(proto.TargetCreateTarget{URL: ""})
+			if err != nil {
+				return fmt.Errorf("创建页面失败: %v", err)
+			}
+			s.page = page
 		}
 
 		log.Println("成功连接到Chrome!")
@@ -114,23 +118,27 @@ func (s *ScraperService) initializeInternal() error {
 		s.browser = browser
 
 		// 创建页面
-		s.page = browser.MustPage("")
+		page, err := browser.Page(proto.TargetCreateTarget{URL: ""})
+		if err != nil {
+			return fmt.Errorf("创建页面失败: %v", err)
+		}
+		s.page = page
 
 		log.Println("浏览器启动成功!")
 	}
 
 	// 设置 User-Agent
-	s.page.MustSetUserAgent(&proto.NetworkSetUserAgentOverride{
-		UserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+	s.page.SetUserAgent(&proto.NetworkSetUserAgentOverride{
+		UserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36",
 	})
 
 	// 添加语言cookie
-	s.page.MustSetCookies(&proto.NetworkCookieParam{
+	s.page.SetCookies([]*proto.NetworkCookieParam{{
 		Name:   "language",
 		Value:  "cn_CN",
 		Domain: ".91porn.com",
 		Path:   "/",
-	})
+	}})
 
 	// 注入反检测脚本
 	s.injectStealth()
@@ -138,37 +146,115 @@ func (s *ScraperService) initializeInternal() error {
 	return nil
 }
 
-// injectStealth 注入反检测脚本
+// injectStealth 注入反检测脚本到主页面
 func (s *ScraperService) injectStealth() {
+	s.injectStealthToPage(s.page)
+}
+
+// injectStealthToPage 注入反检测脚本到指定页面
+func (s *ScraperService) injectStealthToPage(page *rod.Page) {
 	script := `() => {
-		// 隐藏 webdriver
+		// 1. 隐藏 webdriver 标志
 		Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+		delete navigator.__proto__.webdriver;
 
-		// 模拟插件
-		Object.defineProperty(navigator, 'plugins', {
-			get: () => {
-				const plugins = [
-					{ name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer' },
-					{ name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai' },
-					{ name: 'Native Client', filename: 'internal-nacl-plugin' }
-				];
-				plugins.length = 3;
-				return plugins;
-			}
-		});
+		// 2. 模拟真实的插件列表
+		const makePluginArray = () => {
+			const plugins = [
+				{ name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer', description: 'Portable Document Format' },
+				{ name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', description: '' },
+				{ name: 'Native Client', filename: 'internal-nacl-plugin', description: '' }
+			];
+			const pluginArray = Object.create(PluginArray.prototype);
+			plugins.forEach((p, i) => {
+				const plugin = Object.create(Plugin.prototype);
+				Object.defineProperties(plugin, {
+					name: { value: p.name },
+					filename: { value: p.filename },
+					description: { value: p.description },
+					length: { value: 0 }
+				});
+				pluginArray[i] = plugin;
+			});
+			Object.defineProperty(pluginArray, 'length', { value: plugins.length });
+			pluginArray.item = (index) => pluginArray[index] || null;
+			pluginArray.namedItem = (name) => Array.from(pluginArray).find(p => p.name === name) || null;
+			pluginArray.refresh = () => {};
+			return pluginArray;
+		};
+		Object.defineProperty(navigator, 'plugins', { get: makePluginArray });
 
-		// 语言
+		// 3. 模拟 MimeType
+		const makeMimeTypeArray = () => {
+			const mimeTypes = [
+				{ type: 'application/pdf', suffixes: 'pdf', description: 'Portable Document Format' },
+				{ type: 'text/pdf', suffixes: 'pdf', description: 'Portable Document Format' }
+			];
+			const mimeTypeArray = Object.create(MimeTypeArray.prototype);
+			mimeTypes.forEach((m, i) => {
+				const mimeType = Object.create(MimeType.prototype);
+				Object.defineProperties(mimeType, {
+					type: { value: m.type },
+					suffixes: { value: m.suffixes },
+					description: { value: m.description },
+					enabledPlugin: { value: navigator.plugins[0] }
+				});
+				mimeTypeArray[i] = mimeType;
+				mimeTypeArray[m.type] = mimeType;
+			});
+			Object.defineProperty(mimeTypeArray, 'length', { value: mimeTypes.length });
+			mimeTypeArray.item = (index) => mimeTypeArray[index] || null;
+			mimeTypeArray.namedItem = (name) => mimeTypeArray[name] || null;
+			return mimeTypeArray;
+		};
+		Object.defineProperty(navigator, 'mimeTypes', { get: makeMimeTypeArray });
+
+		// 4. 语言设置
 		Object.defineProperty(navigator, 'languages', { get: () => ['zh-CN', 'zh', 'en-US', 'en'] });
+		Object.defineProperty(navigator, 'language', { get: () => 'zh-CN' });
 
-		// Chrome 对象
+		// 5. 硬件并发数（不要太假）
+		Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 8 });
+
+		// 6. 设备内存
+		Object.defineProperty(navigator, 'deviceMemory', { get: () => 8 });
+
+		// 7. 完整的 Chrome 对象
 		window.chrome = {
-			runtime: {},
-			loadTimes: function() {},
-			csi: function() {},
-			app: {}
+			app: {
+				isInstalled: false,
+				InstallState: { DISABLED: 'disabled', INSTALLED: 'installed', NOT_INSTALLED: 'not_installed' },
+				RunningState: { CANNOT_RUN: 'cannot_run', READY_TO_RUN: 'ready_to_run', RUNNING: 'running' }
+			},
+			runtime: {
+				OnInstalledReason: { CHROME_UPDATE: 'chrome_update', INSTALL: 'install', SHARED_MODULE_UPDATE: 'shared_module_update', UPDATE: 'update' },
+				OnRestartRequiredReason: { APP_UPDATE: 'app_update', OS_UPDATE: 'os_update', PERIODIC: 'periodic' },
+				PlatformArch: { ARM: 'arm', ARM64: 'arm64', MIPS: 'mips', MIPS64: 'mips64', X86_32: 'x86-32', X86_64: 'x86-64' },
+				PlatformNaclArch: { ARM: 'arm', MIPS: 'mips', MIPS64: 'mips64', X86_32: 'x86-32', X86_64: 'x86-64' },
+				PlatformOs: { ANDROID: 'android', CROS: 'cros', LINUX: 'linux', MAC: 'mac', OPENBSD: 'openbsd', WIN: 'win' },
+				RequestUpdateCheckStatus: { NO_UPDATE: 'no_update', THROTTLED: 'throttled', UPDATE_AVAILABLE: 'update_available' },
+				connect: () => {},
+				sendMessage: () => {}
+			},
+			csi: () => {},
+			loadTimes: () => ({
+				commitLoadTime: Date.now() / 1000,
+				connectionInfo: 'http/1.1',
+				finishDocumentLoadTime: Date.now() / 1000,
+				finishLoadTime: Date.now() / 1000,
+				firstPaintAfterLoadTime: 0,
+				firstPaintTime: Date.now() / 1000,
+				navigationType: 'Navigate',
+				npnNegotiatedProtocol: 'http/1.1',
+				requestTime: Date.now() / 1000,
+				startLoadTime: Date.now() / 1000,
+				wasAlternateProtocolAvailable: false,
+				wasFetchedViaSpdy: false,
+				wasNpnNegotiated: false
+			})
 		};
 
-		// 权限查询
+		// 8. 权限查询
 		const originalQuery = window.navigator.permissions.query;
 		window.navigator.permissions.query = (parameters) => (
 			parameters.name === 'notifications' ?
@@ -176,18 +262,119 @@ func (s *ScraperService) injectStealth() {
 				originalQuery(parameters)
 		);
 
-		// WebGL 渲染器
-		const getParameter = WebGLRenderingContext.prototype.getParameter;
+		// 9. WebGL 渲染器信息
+		const getParameterProto = WebGLRenderingContext.prototype.getParameter;
 		WebGLRenderingContext.prototype.getParameter = function(parameter) {
 			if (parameter === 37445) return 'Intel Inc.';
 			if (parameter === 37446) return 'Intel Iris OpenGL Engine';
-			return getParameter.apply(this, arguments);
+			return getParameterProto.apply(this, arguments);
 		};
 
-		// 隐藏自动化特征
-		delete navigator.__proto__.webdriver;
+		// WebGL2 也需要处理
+		if (typeof WebGL2RenderingContext !== 'undefined') {
+			const getParameter2Proto = WebGL2RenderingContext.prototype.getParameter;
+			WebGL2RenderingContext.prototype.getParameter = function(parameter) {
+				if (parameter === 37445) return 'Intel Inc.';
+				if (parameter === 37446) return 'Intel Iris OpenGL Engine';
+				return getParameter2Proto.apply(this, arguments);
+			};
+		}
+
+		// 10. 隐藏自动化相关的属性
+		const automationProps = [
+			'__webdriver_evaluate',
+			'__selenium_evaluate',
+			'__webdriver_script_function',
+			'__webdriver_script_func',
+			'__webdriver_script_fn',
+			'__fxdriver_evaluate',
+			'__driver_unwrapped',
+			'__webdriver_unwrapped',
+			'__driver_evaluate',
+			'__selenium_unwrapped',
+			'__fxdriver_unwrapped',
+			'_Selenium_IDE_Recorder',
+			'_selenium',
+			'calledSelenium',
+			'$cdc_asdjflasutopfhvcZLmcfl_',
+			'$chrome_asyncScriptInfo',
+			'__$webdriverAsyncExecutor',
+			'webdriver',
+			'domAutomation',
+			'domAutomationController'
+		];
+		automationProps.forEach(prop => {
+			delete window[prop];
+			delete document[prop];
+		});
+
+		// 11. 修复 Permissions API
+		const originalDescriptor = Object.getOwnPropertyDescriptor(Navigator.prototype, 'permissions');
+		if (originalDescriptor) {
+			Object.defineProperty(Navigator.prototype, 'permissions', {
+				...originalDescriptor,
+				get: function() {
+					const permissions = originalDescriptor.get.call(this);
+					const originalQuery = permissions.query.bind(permissions);
+					permissions.query = (parameters) => {
+						if (parameters.name === 'notifications') {
+							return Promise.resolve({ state: 'prompt', onchange: null });
+						}
+						return originalQuery(parameters);
+					};
+					return permissions;
+				}
+			});
+		}
+
+		// 12. 隐藏 Headless 特征
+		Object.defineProperty(navigator, 'platform', { get: () => 'Win32' });
+		Object.defineProperty(navigator, 'vendor', { get: () => 'Google Inc.' });
+		Object.defineProperty(navigator, 'productSub', { get: () => '20030107' });
+
+		// 13. 修复 iframe contentWindow
+		const originalContentWindow = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'contentWindow');
+		if (originalContentWindow) {
+			Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', {
+				get: function() {
+					const iframe = originalContentWindow.get.call(this);
+					if (iframe) {
+						try {
+							Object.defineProperty(iframe.navigator, 'webdriver', { get: () => undefined });
+						} catch (e) {}
+					}
+					return iframe;
+				}
+			});
+		}
+
+		// 14. 模拟触摸支持（移动端检测）
+		Object.defineProperty(navigator, 'maxTouchPoints', { get: () => 0 });
+
+		// 15. 模拟连接信息
+		if ('connection' in navigator) {
+			Object.defineProperty(navigator, 'connection', {
+				get: () => ({
+					effectiveType: '4g',
+					rtt: 50,
+					downlink: 10,
+					saveData: false
+				})
+			});
+		}
+
+		// 16. 防止 toString 检测
+		const originalToString = Function.prototype.toString;
+		Function.prototype.toString = function() {
+			if (this === Function.prototype.toString) {
+				return 'function toString() { [native code] }';
+			}
+			return originalToString.call(this);
+		};
+
+		console.log('[Stealth] Anti-detection script injected');
 	}`
-	s.page.MustEval(script)
+	page.Eval(script)
 }
 
 // Close 关闭浏览器
@@ -264,29 +451,55 @@ func (s *ScraperService) GetPage() (*rod.Page, error) {
 
 // GetVideoList 获取视频列表
 func (s *ScraperService) GetVideoList(pageNum int) (*VideoListResult, error) {
-	page, err := s.GetPage()
-	if err != nil {
-		return nil, err
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.page == nil {
+		if err := s.initializeInternal(); err != nil {
+			return nil, err
+		}
 	}
+	page := s.page
 
 	cfg := config.Settings
 	listURL := fmt.Sprintf("%s%s&page=%d", cfg.TargetBaseURL, cfg.VideoListPath, pageNum)
 	log.Printf("正在访问第%d页: %s", pageNum, listURL)
 
 	// 导航到页面
-	err = page.Navigate(listURL)
+	err := page.Navigate(listURL)
 	if err != nil {
-		return nil, fmt.Errorf("导航失败: %v", err)
+		// 检测连接断开，尝试重新初始化
+		if strings.Contains(err.Error(), "closed") || strings.Contains(err.Error(), "connection") {
+			log.Println("检测到浏览器连接断开，尝试重新连接...")
+			s.page = nil
+			s.browser = nil
+			if initErr := s.initializeInternal(); initErr != nil {
+				return nil, fmt.Errorf("重新连接失败: %v", initErr)
+			}
+			page = s.page
+			// 重试导航
+			if err = page.Navigate(listURL); err != nil {
+				return nil, fmt.Errorf("导航失败: %v", err)
+			}
+		} else {
+			return nil, fmt.Errorf("导航失败: %v", err)
+		}
 	}
 
 	// 等待页面加载
-	page.MustWaitLoad()
+	if err := page.WaitLoad(); err != nil {
+		log.Printf("等待页面加载失败: %v", err)
+	}
 	log.Println("等待页面加载...如果看到验证页面请手动完成")
 	time.Sleep(5 * time.Second)
 
 	// 检查是否遇到Cloudflare验证
 	for i := 0; i < 30; i++ {
-		title := page.MustInfo().Title
+		info, err := page.Info()
+		if err != nil {
+			break
+		}
+		title := info.Title
 		titleLower := strings.ToLower(title)
 		if strings.Contains(titleLower, "cloudflare") ||
 			strings.Contains(titleLower, "just a moment") ||
@@ -304,7 +517,11 @@ func (s *ScraperService) GetVideoList(pageNum int) (*VideoListResult, error) {
 	s.saveBrowserCookies()
 
 	// 获取页面标题
-	title := page.MustInfo().Title
+	info, err := page.Info()
+	if err != nil {
+		return nil, fmt.Errorf("获取页面信息失败: %v", err)
+	}
+	title := info.Title
 	log.Printf("页面标题: %s", title)
 
 	if strings.Contains(strings.ToLower(title), "cloudflare") ||
@@ -319,7 +536,7 @@ func (s *ScraperService) GetVideoList(pageNum int) (*VideoListResult, error) {
 	log.Printf("总页数: %d", totalPages)
 
 	// 使用JavaScript提取视频列表
-	result := page.MustEval(`() => {
+	result, err := page.Eval(`() => {
 		const videos = [];
 		const seen = new Set();
 		const columns = document.querySelectorAll('.col-xs-12.col-sm-4.col-md-3.col-lg-3');
@@ -358,8 +575,11 @@ func (s *ScraperService) GetVideoList(pageNum int) (*VideoListResult, error) {
 		}
 		return videos;
 	}`)
+	if err != nil {
+		return nil, fmt.Errorf("提取视频列表失败: %v", err)
+	}
 
-	videosData := result.Val().([]interface{})
+	videosData := result.Value.Val().([]interface{})
 	log.Printf("JavaScript 提取到 %d 个视频", len(videosData))
 
 	videos := make([]models.VideoItem, 0, len(videosData))
@@ -475,7 +695,9 @@ func (s *ScraperService) GetVideoDetail(videoURL string) (*models.VideoDetail, e
 	}
 
 	// 等待视频加载
-	page.MustWaitLoad()
+	if err := page.WaitLoad(); err != nil {
+		log.Printf("页面加载失败: %v", err)
+	}
 	time.Sleep(3 * time.Second)
 
 	// 尝试点击播放按钮
@@ -561,7 +783,10 @@ func (s *ScraperService) GetVideoDetail(videoURL string) (*models.VideoDetail, e
 	}
 
 	// 获取标题
-	pageTitle := page.MustInfo().Title
+	var pageTitle string
+	if info, err := page.Info(); err == nil {
+		pageTitle = info.Title
+	}
 	titleEl, err := page.Element("h4, .video-title, #viewvideo-title")
 	if err == nil && titleEl != nil {
 		if text, err := titleEl.Text(); err == nil && text != "" {
@@ -619,15 +844,40 @@ func (s *ScraperService) GetVideoDetailInNewTab(videoURL string) (*models.VideoD
 	browser := s.browser
 	s.mu.Unlock()
 
-	page := browser.MustPage("")
+	page, err := browser.Page(proto.TargetCreateTarget{URL: ""})
+	if err != nil {
+		// 检测连接断开，尝试重新初始化
+		if strings.Contains(err.Error(), "closed") || strings.Contains(err.Error(), "connection") {
+			log.Println("[预缓存] 检测到浏览器连接断开，尝试重新连接...")
+			s.mu.Lock()
+			s.page = nil
+			s.browser = nil
+			if initErr := s.initializeInternal(); initErr != nil {
+				s.mu.Unlock()
+				return nil, fmt.Errorf("重新连接失败: %v", initErr)
+			}
+			browser = s.browser
+			s.mu.Unlock()
+			// 重试创建页面
+			page, err = browser.Page(proto.TargetCreateTarget{URL: ""})
+			if err != nil {
+				return nil, fmt.Errorf("创建新标签页失败: %v", err)
+			}
+		} else {
+			return nil, fmt.Errorf("创建新标签页失败: %v", err)
+		}
+	}
 	defer page.Close()
 
 	// 设置页面超时
 	page = page.Timeout(60 * time.Second)
 
+	// 注入反检测脚本
+	s.injectStealthToPage(page)
+
 	log.Printf("[预缓存] 新标签页访问: %s", videoURL)
 
-	err := page.Navigate(videoURL)
+	err = page.Navigate(videoURL)
 	if err != nil {
 		log.Printf("[预缓存] 页面导航异常: %v", err)
 		return nil, err
@@ -708,7 +958,10 @@ func (s *ScraperService) GetVideoDetailInNewTab(videoURL string) (*models.VideoD
 	}
 
 	// 获取标题
-	pageTitle := page.MustInfo().Title
+	var pageTitle string
+	if info, err := page.Info(); err == nil {
+		pageTitle = info.Title
+	}
 	titleEl, err := page.Element("h4, .video-title, #viewvideo-title")
 	if err == nil && titleEl != nil {
 		if text, err := titleEl.Text(); err == nil && text != "" {

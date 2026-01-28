@@ -3,11 +3,12 @@ services:
     image: browserless/chrome:latest
     restart: unless-stopped
     environment:
-      - CONNECTION_TIMEOUT=600000
-      - MAX_CONCURRENT_SESSIONS=10
-      - ENABLE_DEBUGGER=true
-      - PREBOOT_CHROME=true
-      - KEEP_ALIVE=true
+      - TIMEOUT=600000
+      - HOST=0.0.0.0
+      - TZ=Asia/Shanghai
+      - HEALTH=true
+      - MAX_MEMORY_PERCENT=80
+      - MAX_CPU_PERCENT=80
     ports:
       - "9222:3000"
     shm_size: 2gb
