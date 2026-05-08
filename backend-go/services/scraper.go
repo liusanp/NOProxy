@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"strconv"
 
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/launcher"
@@ -531,6 +532,9 @@ func (s *ScraperService) GetVideoList(pageNum int) (*VideoListResult, error) {
 		return &VideoListResult{Videos: []models.VideoItem{}, TotalPages: 1}, nil
 	}
 
+	// 先触发一次分页刷新
+	s.triggerPagination(page)
+
 	// 获取总页数
 	totalPages := s.getTotalPages(page)
 	log.Printf("总页数: %d", totalPages)
@@ -674,6 +678,88 @@ func (s *ScraperService) getTotalPages(page *rod.Page) int {
 	}
 
 	return totalPages
+}
+
+func (s *ScraperService) triggerPagination(page *rod.Page) {
+
+	// 当前页:
+	// <span class="pagingnav">2</span>
+
+	currentPageEl, err := page.Element("#paging span.pagingnav")
+
+	if err != nil || currentPageEl == nil {
+		log.Println("未找到当前页元素")
+		return
+	}
+
+	currentText, err := currentPageEl.Text()
+
+	if err != nil {
+		log.Printf("获取当前页文本失败: %v", err)
+		return
+	}
+
+	currentText = strings.TrimSpace(currentText)
+
+	currentPage, err := strconv.Atoi(currentText)
+
+	if err != nil {
+		log.Printf("解析当前页失败: %v", err)
+		return
+	}
+
+	log.Printf("当前页: %d", currentPage)
+
+	nextPage := currentPage + 1
+
+	// 找下一页数字按钮
+	nextBtn, err := page.ElementR(
+		"#paging a",
+		fmt.Sprintf(`^\s*%d\s*$`, nextPage),
+	)
+
+	if err != nil || nextBtn == nil {
+		log.Printf("未找到下一页按钮: %d", nextPage)
+		return
+	}
+
+	log.Printf("点击下一页: %d", nextPage)
+
+	// 不要 WaitNavigation
+	// 这个站很多时候不是完整导航
+
+	err = nextBtn.Click(proto.InputMouseButtonLeft, 1)
+
+	if err != nil {
+		log.Printf("点击下一页失败: %v", err)
+		return
+	}
+
+	time.Sleep(2 * time.Second)
+
+	// 再点回当前页
+	backBtn, err := page.ElementR(
+		"#paging a",
+		fmt.Sprintf(`^\s*%d\s*$`, currentPage),
+	)
+
+	if err != nil || backBtn == nil {
+		log.Printf("未找到返回页按钮: %d", currentPage)
+		return
+	}
+
+	log.Printf("点击返回页: %d", currentPage)
+
+	err = backBtn.Click(proto.InputMouseButtonLeft, 1)
+
+	if err != nil {
+		log.Printf("点击返回页失败: %v", err)
+		return
+	}
+
+	time.Sleep(2 * time.Second)
+
+	log.Println("分页刷新完成")
 }
 
 // GetVideoDetail 获取视频详情
