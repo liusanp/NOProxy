@@ -31,6 +31,7 @@
 
       <div class="video-info">
         <h1 class="video-title">{{ videoDetail?.title || '加载中...' }}</h1>
+        <button class="back-btn" @click="reloadVideo">重新加载视频</button>
       </div>
     </div>
   </div>
@@ -75,6 +76,28 @@ export default {
       try {
         // 获取视频详情
         const response = await videoApi.getDetail(this.id)
+        this.videoDetail = response.data
+        console.log('获取到视频详情:', this.videoDetail)
+      } catch (err) {
+        console.error('加载视频失败:', err)
+        this.error = '加载视频失败，请稍后重试'
+      } finally {
+        this.loading = false
+        // 等待 DOM 更新后再初始化播放器
+        await this.$nextTick()
+        if (!this.error) {
+          this.initPlayer()
+        }
+      }
+    },
+
+    async reloadVideo() {
+      this.loading = true
+      this.error = null
+
+      try {
+        // 获取视频详情
+        const response = await videoApi.reloadDetail(this.id)
         this.videoDetail = response.data
         console.log('获取到视频详情:', this.videoDetail)
       } catch (err) {

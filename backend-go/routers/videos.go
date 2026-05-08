@@ -31,6 +31,7 @@ func RegisterVideosRoutes(r *gin.RouterGroup) {
 	{
 		videos.GET("", getVideoList)
 		videos.GET("/:video_id", getVideoDetail)
+		videos.GET("/reload/:video_id", reloadVideoDetail)
 		videos.DELETE("/cache", clearVideoCache)
 	}
 }
@@ -188,6 +189,34 @@ func getVideoDetail(c *gin.Context) {
 			return
 		}
 	}
+
+	// 视频未缓存，每次都重新获取详情（使用新标签页避免冲突）
+	videoURL := cfg.TargetBaseURL + "/view_video.php?viewkey=" + videoID
+	detail, err := scraperService.GetVideoDetailInNewTab(videoURL)
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Detail: "获取视频详情失败: " + err.Error(),
+		})
+		return
+	}
+
+	if detail == nil {
+		c.JSON(http.StatusNotFound, models.ErrorResponse{
+			Detail: "视频不存在",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, detail)
+}
+
+// reloadVideoDetail 重载视频详情
+func reloadVideoDetail(c *gin.Context) {
+	videoID := c.Param("video_id")
+	scraperService := services.GetScraperService()
+	cfg := config.Settings
+
 
 	// 视频未缓存，每次都重新获取详情（使用新标签页避免冲突）
 	videoURL := cfg.TargetBaseURL + "/view_video.php?viewkey=" + videoID

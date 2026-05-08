@@ -10,10 +10,10 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
-	"strconv"
 
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/launcher"
@@ -533,7 +533,9 @@ func (s *ScraperService) GetVideoList(pageNum int) (*VideoListResult, error) {
 	}
 
 	// 先触发一次分页刷新
-	s.triggerPagination(page)
+	// s.triggerPagination(page)
+	// JS reload 刷新真实数据
+	s.refreshPage(page)
 
 	// 获取总页数
 	totalPages := s.getTotalPages(page)
@@ -680,6 +682,26 @@ func (s *ScraperService) getTotalPages(page *rod.Page) int {
 	return totalPages
 }
 
+func (s *ScraperService) refreshPage(page *rod.Page) {
+
+	log.Println("执行 location.reload() 刷新页面...")
+
+	_, err := page.Eval(`() => {
+		location.reload();
+	}`)
+
+	if err != nil {
+		log.Printf("执行 reload 失败: %v", err)
+		return
+	}
+
+	page.MustWaitLoad()
+
+	time.Sleep(3 * time.Second)
+
+	log.Println("页面刷新完成")
+}
+
 func (s *ScraperService) triggerPagination(page *rod.Page) {
 
 	// 当前页:
@@ -786,6 +808,9 @@ func (s *ScraperService) GetVideoDetail(videoURL string) (*models.VideoDetail, e
 	}
 	time.Sleep(3 * time.Second)
 
+	// JS reload 刷新真实数据
+	s.refreshPage(page)
+
 	// 尝试点击播放按钮
 	playBtn, err := page.Element(".vjs-big-play-button, .play-button, #player")
 	if err == nil && playBtn != nil {
@@ -796,12 +821,53 @@ func (s *ScraperService) GetVideoDetail(videoURL string) (*models.VideoDetail, e
 	// 获取视频链接
 	var videoSrc string
 
+	// 等待 video 出现
+	page.Timeout(30 * time.Second).
+		MustElement(".video-container video")
+
+	// 尝试播放
+	_, err = page.Eval(`() => {
+
+		const video = document.querySelector('.video-container video');
+
+		if (video) {
+			video.play();
+		}
+
+	}`)
+
+	if err != nil {
+		log.Printf("播放视频失败: %v", err)
+	}
+
+	time.Sleep(3 * time.Second)
+
+	// 获取真实播放地址
+	vSrc, err := page.Eval(`() => {
+
+		const video = document.querySelector('.video-container video');
+
+		if (!video) return '';
+
+		return video.currentSrc || video.src || '';
+	}`)
+
+	if err != nil {
+		log.Printf("获取视频地址失败: %v", err)
+	} else if vSrc.Value.Nil() {
+		videoSrc = ""
+	} else {
+		videoSrc = vSrc.Value.Str()
+	}
+
 	// 方法1: 从 .video-container 下的 source 标签获取
-	sourceEl, err := page.Element(".video-container source")
-	if err == nil && sourceEl != nil {
-		if src, err := sourceEl.Attribute("src"); err == nil && src != nil && *src != "" {
-			videoSrc = *src
-			log.Printf("从 .video-container source 找到: %s", videoSrc)
+	if videoSrc == "" {
+		sourceEl, err := page.Element(".video-container source")
+		if err == nil && sourceEl != nil {
+			if src, err := sourceEl.Attribute("src"); err == nil && src != nil && *src != "" {
+				videoSrc = *src
+				log.Printf("从 .video-container source 找到: %s", videoSrc)
+			}
 		}
 	}
 
@@ -978,6 +1044,9 @@ func (s *ScraperService) GetVideoDetailInNewTab(videoURL string) (*models.VideoD
 	log.Printf("[预缓存] 页面加载完成，等待视频元素...")
 	time.Sleep(3 * time.Second)
 
+	// JS reload 刷新真实数据
+	s.refreshPage(page)
+
 	// 尝试点击播放按钮
 	playBtn, err := page.Element(".vjs-big-play-button, .play-button, #player")
 	if err == nil && playBtn != nil {
@@ -988,11 +1057,52 @@ func (s *ScraperService) GetVideoDetailInNewTab(videoURL string) (*models.VideoD
 	// 获取视频链接
 	var videoSrc string
 
+	// 等待 video 出现
+	page.Timeout(30 * time.Second).
+		MustElement(".video-container video")
+
+	// 尝试播放
+	_, err = page.Eval(`() => {
+
+		const video = document.querySelector('.video-container video');
+
+		if (video) {
+			video.play();
+		}
+
+	}`)
+
+	if err != nil {
+		log.Printf("播放视频失败: %v", err)
+	}
+
+	time.Sleep(3 * time.Second)
+
+	// 获取真实播放地址
+	vSrc, err := page.Eval(`() => {
+
+		const video = document.querySelector('.video-container video');
+
+		if (!video) return '';
+
+		return video.currentSrc || video.src || '';
+	}`)
+
+	if err != nil {
+		log.Printf("获取视频地址失败: %v", err)
+	} else if vSrc.Value.Nil() {
+		videoSrc = ""
+	} else {
+		videoSrc = vSrc.Value.Str()
+	}
+
 	// 方法1-5与GetVideoDetail相同
-	sourceEl, err := page.Element(".video-container source")
-	if err == nil && sourceEl != nil {
-		if src, err := sourceEl.Attribute("src"); err == nil && src != nil && *src != "" {
-			videoSrc = *src
+	if videoSrc == "" {
+		sourceEl, err := page.Element(".video-container source")
+		if err == nil && sourceEl != nil {
+			if src, err := sourceEl.Attribute("src"); err == nil && src != nil && *src != "" {
+				videoSrc = *src
+			}
 		}
 	}
 

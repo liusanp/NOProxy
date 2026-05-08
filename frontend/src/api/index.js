@@ -23,6 +23,11 @@ export const videoApi = {
     return api.get(`/videos/${videoId}`)
   },
 
+  // 重载视频详情
+  reloadDetail(videoId) {
+    return api.get(`/videos/reload/${videoId}`)
+  },
+
   // 获取视频流地址
   getStreamUrl(videoId) {
     return `/api/stream/${videoId}`
